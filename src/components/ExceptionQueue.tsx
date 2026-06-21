@@ -75,6 +75,11 @@ export default function ExceptionQueue() {
   const handleProcess = () => {
     if (!currentException) return
 
+    if (processType === 'reassign' && !selectedInfluencer) {
+      message.warning('请选择目标达人')
+      return
+    }
+
     const updateData: Partial<ExceptionRecord> = {
       status: 'resolved',
       resolution: processType,

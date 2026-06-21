@@ -134,24 +134,18 @@ export function detectExceptions(orders: OrderRecord[], influencers: Influencer[
   }
   
   orders.forEach(order => {
-    if (order.influencerId) {
+    if (order.influencerId && !order.isRefund) {
       const influencer = influencers.find(i => i.id === order.influencerId)
       if (influencer && !isInCooperationPeriod(order.date, influencer)) {
-        const orderMonth = dayjs(order.date).format('YYYY-MM')
-        const coopStartMonth = dayjs(influencer.cooperationStart).format('YYYY-MM')
-        const coopEndMonth = dayjs(influencer.cooperationEnd).format('YYYY-MM')
-        
-        if (orderMonth !== coopStartMonth && orderMonth !== coopEndMonth) {
-          exceptions.push({
-            id: uuidv4(),
-            type: 'cross_month',
-            description: `订单 ${order.orderNo} 消费时间 ${dayjs(order.date).format('YYYY-MM-DD')} 不在达人 ${influencer.name} 合作周期内`,
-            orderIds: [order.id],
-            orders: [order],
-            status: 'pending',
-            createdAt: new Date().toISOString()
-          })
-        }
+        exceptions.push({
+          id: uuidv4(),
+          type: 'cross_month',
+          description: `订单 ${order.orderNo} 消费时间 ${dayjs(order.date).format('YYYY-MM-DD')} 不在达人 ${influencer.name} 合作周期（${influencer.cooperationStart} ~ ${influencer.cooperationEnd}）内`,
+          orderIds: [order.id],
+          orders: [order],
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        })
       }
     }
   })
@@ -179,20 +173,23 @@ export function calculateSettlement(
   categories: ProjectCategory[],
   exceptions: ExceptionRecord[]
 ): InfluencerSettlement {
-  const resolvedOrderIds = new Set<string>()
+  const excludedOrderIds = new Set<string>()
   exceptions.forEach(e => {
+    if (e.status === 'pending') {
+      e.orderIds.forEach(id => excludedOrderIds.add(id))
+    }
     if (e.status === 'resolved' && e.resolution === 'exclude') {
-      e.orderIds.forEach(id => resolvedOrderIds.add(id))
+      e.orderIds.forEach(id => excludedOrderIds.add(id))
     }
     if (e.status === 'resolved' && e.resolution === 'reassign' && e.assignedInfluencerId !== influencer.id) {
-      e.orderIds.forEach(id => resolvedOrderIds.add(id))
+      e.orderIds.forEach(id => excludedOrderIds.add(id))
     }
   })
   
   const influencerOrders = orders.filter(o => 
     o.influencerId === influencer.id && 
     !o.isRefund && 
-    !resolvedOrderIds.has(o.id)
+    !excludedOrderIds.has(o.id)
   )
   
   const refundOrders = orders.filter(o => 

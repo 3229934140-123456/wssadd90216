@@ -57,10 +57,11 @@ export default function Settlement() {
     doGenerate()
   }
 
-  const doGenerate = async () => {
+  const doGenerate = async (versionNum?: number) => {
     setGenerating(true)
     try {
       const newSettlements: InfluencerSettlement[] = []
+      const version = versionNum ?? currentVersion
       
       for (const influencer of influencers) {
         const settlement = calculateSettlement(
@@ -69,27 +70,31 @@ export default function Settlement() {
           projectCategories,
           exceptions
         )
-        settlement.version = currentVersion
+        settlement.version = version
         settlement.period = period
         if (settlement.items.length > 0) {
           newSettlements.push(settlement)
         }
       }
 
-      setSettlements(newSettlements)
+      const existingOtherVersions = settlements.filter(s => s.version !== version)
+      setSettlements([...existingOtherVersions, ...newSettlements])
       setCurrentPeriod(period)
+      if (versionNum) {
+        setCurrentVersion(versionNum)
+      }
 
       addVersion({
         id: uuidv4(),
         period,
-        version: currentVersion,
+        version,
         createdAt: new Date().toISOString(),
         createdBy: '财务专员',
-        note: '自动生成结算单',
+        note: version > 1 ? `重新计算 V${version}` : '自动生成结算单',
         settlementIds: newSettlements.map(s => s.id)
       })
 
-      message.success(`成功生成 ${newSettlements.length} 位达人的结算单`)
+      message.success(`成功生成 V${version} 版本 ${newSettlements.length} 位达人的结算单`)
     } catch (error) {
       message.error(`生成失败：${error}`)
     } finally {
@@ -124,14 +129,14 @@ export default function Settlement() {
   }
 
   const handleExportAll = () => {
-    if (settlements.length === 0) {
+    if (currentVersionSettlements.length === 0) {
       message.warning('暂无结算数据可导出')
       return
     }
 
     const sheets: { name: string; data: any[] }[] = []
 
-    settlements.forEach(s => {
+    currentVersionSettlements.forEach(s => {
       const influencerData = [
         { '达人结算单': '' },
         { '达人姓名': s.influencerName },
@@ -174,7 +179,7 @@ export default function Settlement() {
       { '版本': `V${currentVersion}` },
       { '': '' },
       { '达人姓名': '达人姓名', '顾客数': '顾客数', '有效顾客数': '有效顾客数', '成交总额': '成交总额', '固定探店费': '固定探店费', '客资奖励': '客资奖励', '成交提成': '成交提成', '应付金额': '应付金额', '状态': '状态' },
-      ...settlements.map(s => ({
+      ...currentVersionSettlements.map(s => ({
         '达人姓名': s.influencerName,
         '顾客数': s.customerCount,
         '有效顾客数': s.validCustomerCount,
@@ -187,13 +192,13 @@ export default function Settlement() {
       })),
       { '': '' },
       { '合计': '合计', 
-        '顾客数': settlements.reduce((sum, s) => sum + s.customerCount, 0),
-        '有效顾客数': settlements.reduce((sum, s) => sum + s.validCustomerCount, 0),
-        '成交总额': settlements.reduce((sum, s) => sum + s.totalAmount, 0).toFixed(2),
-        '固定探店费': settlements.reduce((sum, s) => sum + s.fixedFee, 0).toFixed(2),
-        '客资奖励': settlements.reduce((sum, s) => sum + s.validCustomerReward, 0).toFixed(2),
-        '成交提成': settlements.reduce((sum, s) => sum + s.totalCommission, 0).toFixed(2),
-        '应付金额': settlements.reduce((sum, s) => sum + s.finalAmount, 0).toFixed(2)
+        '顾客数': currentVersionSettlements.reduce((sum, s) => sum + s.customerCount, 0),
+        '有效顾客数': currentVersionSettlements.reduce((sum, s) => sum + s.validCustomerCount, 0),
+        '成交总额': currentVersionSettlements.reduce((sum, s) => sum + s.totalAmount, 0).toFixed(2),
+        '固定探店费': currentVersionSettlements.reduce((sum, s) => sum + s.fixedFee, 0).toFixed(2),
+        '客资奖励': currentVersionSettlements.reduce((sum, s) => sum + s.validCustomerReward, 0).toFixed(2),
+        '成交提成': currentVersionSettlements.reduce((sum, s) => sum + s.totalCommission, 0).toFixed(2),
+        '应付金额': currentVersionSettlements.reduce((sum, s) => sum + s.finalAmount, 0).toFixed(2)
       }
     ]
     sheets.push({ name: '门店汇总表', data: summaryData })
@@ -205,7 +210,7 @@ export default function Settlement() {
       { '生成日期': new Date().toLocaleDateString() },
       { '': '' },
       { '序号': '序号', '收款人': '收款人', '联系电话': '联系电话', '应付金额': '应付金额', '备注': '备注' },
-      ...settlements.map((s, idx) => {
+      ...currentVersionSettlements.map((s, idx) => {
         const influencer = influencers.find(i => i.id === s.influencerId)
         return {
           '序号': idx + 1,
@@ -217,7 +222,7 @@ export default function Settlement() {
       }),
       { '': '' },
       { '合计': '合计',
-        '应付金额': settlements.reduce((sum, s) => sum + s.finalAmount, 0).toFixed(2)
+        '应付金额': currentVersionSettlements.reduce((sum, s) => sum + s.finalAmount, 0).toFixed(2)
       }
     ]
     sheets.push({ name: '付款申请表', data: paymentData })
@@ -263,11 +268,12 @@ export default function Settlement() {
   }
 
   const handleBatchConfirm = () => {
+    const draftCount = currentVersionSettlements.filter(s => s.status === 'draft').length
     Modal.confirm({
       title: '批量确认结算单',
-      content: `确认将 ${settlements.filter(s => s.status === 'draft').length} 份草稿状态的结算单全部标记为已确认？`,
+      content: `确认将 ${draftCount} 份草稿状态的结算单全部标记为已确认？`,
       onOk: () => {
-        settlements.forEach(s => {
+        currentVersionSettlements.forEach(s => {
           if (s.status === 'draft') {
             updateSettlement(s.id, { status: 'confirmed' })
           }
@@ -277,15 +283,19 @@ export default function Settlement() {
     })
   }
 
+  const currentVersionSettlements = settlements.filter(
+    s => s.version === currentVersion && s.period === period
+  )
+
   const totalStats = {
-    totalAmount: settlements.reduce((sum, s) => sum + s.totalAmount, 0),
-    totalFinal: settlements.reduce((sum, s) => sum + s.finalAmount, 0),
-    totalFixed: settlements.reduce((sum, s) => sum + s.fixedFee, 0),
-    totalReward: settlements.reduce((sum, s) => sum + s.validCustomerReward, 0),
-    totalCommission: settlements.reduce((sum, s) => sum + s.totalCommission, 0),
-    totalCustomers: settlements.reduce((sum, s) => sum + s.customerCount, 0),
-    totalValidCustomers: settlements.reduce((sum, s) => sum + s.validCustomerCount, 0),
-    totalOrders: settlements.reduce((sum, s) => sum + s.items.length, 0)
+    totalAmount: currentVersionSettlements.reduce((sum, s) => sum + s.totalAmount, 0),
+    totalFinal: currentVersionSettlements.reduce((sum, s) => sum + s.finalAmount, 0),
+    totalFixed: currentVersionSettlements.reduce((sum, s) => sum + s.fixedFee, 0),
+    totalReward: currentVersionSettlements.reduce((sum, s) => sum + s.validCustomerReward, 0),
+    totalCommission: currentVersionSettlements.reduce((sum, s) => sum + s.totalCommission, 0),
+    totalCustomers: currentVersionSettlements.reduce((sum, s) => sum + s.customerCount, 0),
+    totalValidCustomers: currentVersionSettlements.reduce((sum, s) => sum + s.validCustomerCount, 0),
+    totalOrders: currentVersionSettlements.reduce((sum, s) => sum + s.items.length, 0)
   }
 
   const settlementColumns = [
@@ -538,7 +548,7 @@ export default function Settlement() {
               <Card>
                 <Statistic 
                   title="服务达人" 
-                  value={settlements.length} 
+                  value={currentVersionSettlements.length} 
                   suffix="人"
                 />
               </Card>
@@ -595,8 +605,8 @@ export default function Settlement() {
                 <Button 
                   icon={<HistoryOutlined />} 
                   onClick={() => {
-                    setCurrentVersion(currentVersion + 1)
-                    generateSettlements()
+                    const newVersion = currentVersion + 1
+                    doGenerate(newVersion)
                   }}
                   loading={generating}
                 >
@@ -611,7 +621,7 @@ export default function Settlement() {
                 >
                   打印
                 </Button>
-                {settlements.some(s => s.status === 'draft') && (
+                {currentVersionSettlements.some(s => s.status === 'draft') && (
                   <Button type="primary" onClick={handleBatchConfirm}>
                     批量确认
                   </Button>
@@ -620,7 +630,7 @@ export default function Settlement() {
             </div>
             <Table
               columns={settlementColumns}
-              dataSource={settlements}
+              dataSource={currentVersionSettlements}
               rowKey="id"
               scroll={{ x: 1400 }}
               pagination={{ pageSize: 20, showSizeChanger: true }}
@@ -665,7 +675,7 @@ export default function Settlement() {
               <Descriptions.Item label="结算周期">{period}</Descriptions.Item>
               <Descriptions.Item label="版本">V{currentVersion}</Descriptions.Item>
               <Descriptions.Item label="生成时间">{new Date().toLocaleString()}</Descriptions.Item>
-              <Descriptions.Item label="达人数">{settlements.length} 人</Descriptions.Item>
+              <Descriptions.Item label="达人数">{currentVersionSettlements.length} 人</Descriptions.Item>
               <Descriptions.Item label="总订单数">{totalStats.totalOrders} 单</Descriptions.Item>
               <Descriptions.Item label="总顾客数">{totalStats.totalCustomers} 人</Descriptions.Item>
               <Descriptions.Item label="成交总额">
@@ -675,7 +685,7 @@ export default function Settlement() {
                 <span className="text-primary font-bold">¥{totalStats.totalFinal.toFixed(2)}</span>
               </Descriptions.Item>
               <Descriptions.Item label="人均佣金">
-                ¥{(totalStats.totalFinal / Math.max(settlements.length, 1)).toFixed(2)}
+                ¥{(totalStats.totalFinal / Math.max(currentVersionSettlements.length, 1)).toFixed(2)}
               </Descriptions.Item>
             </Descriptions>
           </div>

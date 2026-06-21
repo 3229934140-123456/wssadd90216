@@ -40,26 +40,32 @@ export default function AutoMatch() {
   const checkPrerequisites = () => {
     const requiredTypes: FileType[] = ['cashier', 'groupbuy']
     const missingTypes: string[] = []
+    const typeLabels: Record<FileType, string> = {
+      cooperation: '达人合作表',
+      cashier: '收银流水',
+      groupbuy: '团购核销表',
+      refund: '退款明细'
+    }
     
     requiredTypes.forEach(type => {
       if (!importedFiles.some(f => f.type === type)) {
-        const typeLabels: Record<FileType, string> = {
-          cooperation: '达人合作表',
-          cashier: '收银流水',
-          groupbuy: '团购核销表',
-          refund: '退款明细'
-        }
         missingTypes.push(typeLabels[type])
       }
-      if (!fieldMappings[type]) {
-        const typeLabels: Record<FileType, string> = {
-          cooperation: '达人合作表',
-          cashier: '收银流水',
-          groupbuy: '团购核销表',
-          refund: '退款明细'
-        }
+      const mapping = fieldMappings[type]
+      if (!mapping) {
         if (!missingTypes.includes(typeLabels[type])) {
           missingTypes.push(`${typeLabels[type]}字段映射`)
+        }
+      } else {
+        const requiredFields = [
+          { key: 'phone', label: '手机号' },
+          { key: 'orderNo', label: '订单号' },
+          { key: 'projectName', label: '项目名称' },
+          { key: 'amount', label: '成交金额' }
+        ]
+        const missingFields = requiredFields.filter(f => !mapping[f.key as keyof typeof mapping])
+        if (missingFields.length > 0) {
+          missingTypes.push(`${typeLabels[type]}缺少字段：${missingFields.map(f => f.label).join('、')}`)
         }
       }
     })

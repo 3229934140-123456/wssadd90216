@@ -121,24 +121,28 @@ export default function FileImport() {
     setMappingVisible(true)
   }
 
-  const handleMappingSubmit = () => {
+  const handleMappingSubmit = async () => {
     if (!mappingData || !currentType) return
     
-    const values = form.getFieldsValue()
-    const mapping: FieldMapping = {
-      fileType: currentType,
-      phone: values.phone,
-      orderNo: values.orderNo,
-      projectName: values.projectName,
-      amount: values.amount,
-      date: values.date,
-      customerName: values.customerName,
-      influencerName: values.influencerName
-    }
+    try {
+      const values = await form.validateFields()
+      const mapping: FieldMapping = {
+        fileType: currentType,
+        phone: values.phone,
+        orderNo: values.orderNo,
+        projectName: values.projectName,
+        amount: values.amount,
+        date: values.date,
+        customerName: values.customerName,
+        influencerName: values.influencerName
+      }
 
-    setFieldMapping(currentType, mapping)
-    setMappingVisible(false)
-    message.success('字段映射已保存')
+      setFieldMapping(currentType, mapping)
+      setMappingVisible(false)
+      message.success('字段映射已保存')
+    } catch (error) {
+      message.warning('请填写所有必填字段')
+    }
   }
 
   const handlePreview = (file: ImportedFile) => {
