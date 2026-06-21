@@ -65,7 +65,7 @@ export interface OrderRecord {
   rawData: any
 }
 
-export type ExceptionType = 'duplicate_customer' | 'split_payment' | 'cross_month' | 'mismatch'
+export type ExceptionType = 'duplicate_customer' | 'split_payment' | 'cross_month' | 'mismatch' | 'cooperation_period'
 
 export interface ExceptionRecord {
   id: string

@@ -73,11 +73,11 @@ export function matchProjectCategory(projectName: string, categories: ProjectCat
 export function isInCooperationPeriod(orderDate: string, influencer: Influencer): boolean {
   if (!orderDate || !influencer.cooperationStart || !influencer.cooperationEnd) return false
   
-  const orderTime = dayjs(orderDate)
-  const startTime = dayjs(influencer.cooperationStart)
+  const orderTime = dayjs(orderDate).startOf('day')
+  const startTime = dayjs(influencer.cooperationStart).startOf('day')
   const endTime = dayjs(influencer.cooperationEnd).endOf('day')
   
-  return orderTime.isAfter(startTime) && orderTime.isBefore(endTime)
+  return orderTime.isSameOrAfter(startTime) && orderTime.isSameOrBefore(endTime)
 }
 
 export function detectExceptions(orders: OrderRecord[], influencers: Influencer[]): ExceptionRecord[] {
@@ -139,7 +139,7 @@ export function detectExceptions(orders: OrderRecord[], influencers: Influencer[
       if (influencer && !isInCooperationPeriod(order.date, influencer)) {
         exceptions.push({
           id: uuidv4(),
-          type: 'cross_month',
+          type: 'cooperation_period',
           description: `订单 ${order.orderNo} 消费时间 ${dayjs(order.date).format('YYYY-MM-DD')} 不在达人 ${influencer.name} 合作周期（${influencer.cooperationStart} ~ ${influencer.cooperationEnd}）内`,
           orderIds: [order.id],
           orders: [order],

@@ -20,14 +20,16 @@ const exceptionTypeConfig: Record<ExceptionType, { label: string; color: string;
   duplicate_customer: { label: '重复顾客', color: 'orange', icon: '👥' },
   split_payment: { label: '拆单付款', color: 'blue', icon: '💳' },
   cross_month: { label: '跨月补款', color: 'red', icon: '📅' },
-  mismatch: { label: '无法匹配', color: 'purple', icon: '❓' }
+  mismatch: { label: '无法匹配', color: 'purple', icon: '❓' },
+  cooperation_period: { label: '合作周期异常', color: 'warning', icon: '⏰' }
 }
 
 const exceptionBadgeClass: Record<ExceptionType, string> = {
   duplicate_customer: 'duplicate',
   split_payment: 'split',
   cross_month: 'cross',
-  mismatch: 'mismatch'
+  mismatch: 'mismatch',
+  cooperation_period: 'cooperation'
 }
 
 export default function ExceptionQueue() {
@@ -280,15 +282,19 @@ export default function ExceptionQueue() {
           </Button>
           {record.status === 'pending' && (
             <>
-              <Button size="small" icon={<MergeOutlined />} onClick={() => openProcess(record, 'merge')}>
-                合并
-              </Button>
+              {record.type !== 'cooperation_period' && (
+                <Button size="small" icon={<MergeOutlined />} onClick={() => openProcess(record, 'merge')}>
+                  合并
+                </Button>
+              )}
               <Button size="small" icon={<DeleteOutlined />} onClick={() => openProcess(record, 'exclude')}>
                 剔除
               </Button>
-              <Button size="small" icon={<UserOutlined />} onClick={() => openProcess(record, 'reassign')}>
-                改归属
-              </Button>
+              {record.type === 'cooperation_period' || record.type === 'duplicate_customer' || record.type === 'mismatch' ? (
+                <Button size="small" icon={<UserOutlined />} onClick={() => openProcess(record, 'reassign')}>
+                  改归属
+                </Button>
+              ) : null}
               <Button size="small" onClick={() => handleIgnore(record)}>
                 忽略
               </Button>
@@ -480,7 +486,8 @@ export default function ExceptionQueue() {
       <Modal
         title={
           processType === 'merge' ? '合并归属' :
-          processType === 'exclude' ? '剔除订单' : '修改达人归属'
+          processType === 'exclude' ? '剔除订单' : 
+          currentException?.type === 'cooperation_period' ? '重新分配合作达人' : '修改达人归属'
         }
         open={processVisible}
         onOk={handleProcess}
@@ -524,7 +531,7 @@ export default function ExceptionQueue() {
 
             {processType === 'exclude' && (
               <Alert
-                message="将从结算中剔除这些订单"
+                message={currentException.type === 'cooperation_period' ? '将这些合作期外订单从结算中剔除' : '将从结算中剔除这些订单'}
                 description={
                   <div>
                     <p>共 <span className="font-bold text-danger">{currentException.orderIds.length}</span> 条订单</p>
@@ -539,8 +546,8 @@ export default function ExceptionQueue() {
             {processType === 'reassign' && (
               <div>
                 <Alert
-                  message="请选择新的达人归属"
-                  description="所有关联订单将重新归属于所选达人"
+                  message={currentException.type === 'cooperation_period' ? '请选择合作期内的达人' : '请选择新的达人归属'}
+                  description={currentException.type === 'cooperation_period' ? '订单将重新归属于所选合作期内的达人计算佣金' : '所有关联订单将重新归属于所选达人'}
                   type="info"
                   showIcon
                   style={{ marginBottom: 16 }}
@@ -553,7 +560,7 @@ export default function ExceptionQueue() {
                     <Select
                       value={selectedInfluencer}
                       onChange={setSelectedInfluencer}
-                      placeholder="请选择要归属的达人"
+                      placeholder={currentException.type === 'cooperation_period' ? '请选择合作期内的达人' : '请选择要归属的达人'}
                       options={influencers.map(i => ({
                         value: i.id,
                         label: `${i.name} (${i.phone})`
