@@ -158,6 +158,7 @@ export interface SettlementVersion {
   createdBy: string
   note?: string
   settlementIds: string[]
+  settlementsSnapshot: InfluencerSettlement[]
 }
 
 export interface AppState {

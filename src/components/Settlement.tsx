@@ -91,7 +91,8 @@ export default function Settlement() {
         createdAt: new Date().toISOString(),
         createdBy: '财务专员',
         note: version > 1 ? `重新计算 V${version}` : '自动生成结算单',
-        settlementIds: newSettlements.map(s => s.id)
+        settlementIds: newSettlements.map(s => s.id),
+        settlementsSnapshot: JSON.parse(JSON.stringify(newSettlements))
       })
 
       message.success(`成功生成 V${version} 版本 ${newSettlements.length} 位达人的结算单`)

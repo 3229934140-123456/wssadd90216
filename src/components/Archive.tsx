@@ -106,9 +106,9 @@ export default function Archive() {
   }
 
   const openVersionDetail = (version: SettlementVersion) => {
-    const versionSettlements = settlements.filter(s => 
-      version.settlementIds.includes(s.id)
-    )
+    const versionSettlements = version.settlementsSnapshot && version.settlementsSnapshot.length > 0
+      ? version.settlementsSnapshot
+      : settlements.filter(s => version.settlementIds.includes(s.id))
     setCurrentItem({ ...version, settlements: versionSettlements })
     setDetailVisible(true)
   }
@@ -166,8 +166,12 @@ export default function Archive() {
       return
     }
     
-    const v1Settlements = settlements.filter(s => v1.settlementIds.includes(s.id))
-    const v2Settlements = settlements.filter(s => v2.settlementIds.includes(s.id))
+    const v1Settlements = v1.settlementsSnapshot && v1.settlementsSnapshot.length > 0
+      ? v1.settlementsSnapshot
+      : settlements.filter(s => v1.settlementIds.includes(s.id))
+    const v2Settlements = v2.settlementsSnapshot && v2.settlementsSnapshot.length > 0
+      ? v2.settlementsSnapshot
+      : settlements.filter(s => v2.settlementIds.includes(s.id))
     
     const compareData: any[] = []
     const allInfluencers = new Set([

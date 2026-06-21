@@ -295,9 +295,11 @@ export default function ExceptionQueue() {
                   改归属
                 </Button>
               ) : null}
-              <Button size="small" onClick={() => handleIgnore(record)}>
-                忽略
-              </Button>
+              {record.type !== 'cooperation_period' && (
+                <Button size="small" onClick={() => handleIgnore(record)}>
+                  忽略
+                </Button>
+              )}
             </>
           )}
         </Space>
