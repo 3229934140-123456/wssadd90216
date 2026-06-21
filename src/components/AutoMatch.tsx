@@ -130,9 +130,6 @@ export default function AutoMatch() {
         rawData: row
       }
 
-      if (influencer && !isInCooperationPeriod(date, influencer)) {
-      }
-
       processedOrders.push(order)
     }
 

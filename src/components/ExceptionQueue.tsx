@@ -21,7 +21,7 @@ const exceptionTypeConfig: Record<ExceptionType, { label: string; color: string;
   split_payment: { label: '拆单付款', color: 'blue', icon: '💳' },
   cross_month: { label: '跨月补款', color: 'red', icon: '📅' },
   mismatch: { label: '无法匹配', color: 'purple', icon: '❓' },
-  cooperation_period: { label: '合作周期异常', color: 'warning', icon: '⏰' }
+  cooperation_period: { label: '合作周期异常', color: 'gold', icon: '⏰' }
 }
 
 const exceptionBadgeClass: Record<ExceptionType, string> = {
@@ -349,7 +349,8 @@ export default function ExceptionQueue() {
                 { value: 'duplicate_customer', label: '重复顾客' },
                 { value: 'split_payment', label: '拆单付款' },
                 { value: 'cross_month', label: '跨月补款' },
-                { value: 'mismatch', label: '无法匹配' }
+                { value: 'mismatch', label: '无法匹配' },
+                { value: 'cooperation_period', label: '合作周期异常' }
               ]}
             />
             <Select

@@ -77,7 +77,8 @@ export function isInCooperationPeriod(orderDate: string, influencer: Influencer)
   const startTime = dayjs(influencer.cooperationStart).startOf('day')
   const endTime = dayjs(influencer.cooperationEnd).endOf('day')
   
-  return orderTime.isSameOrAfter(startTime) && orderTime.isSameOrBefore(endTime)
+  return (orderTime.isSame(startTime) || orderTime.isAfter(startTime)) && 
+         (orderTime.isSame(endTime) || orderTime.isBefore(endTime))
 }
 
 export function detectExceptions(orders: OrderRecord[], influencers: Influencer[]): ExceptionRecord[] {

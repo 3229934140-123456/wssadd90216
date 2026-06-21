@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { 
   Button, Table, Modal, Form, Input, message, Space, Tag, 
   Row, Col, Card, Timeline, Empty, DatePicker, Select,
-  Descriptions, Divider, Typography, List, Alert, Statistic
+  Descriptions, Divider, Typography, List, Alert, Statistic,
+  Collapse
 } from 'antd'
 import { 
   SearchOutlined, HistoryOutlined, FileSearchOutlined,
@@ -17,6 +18,7 @@ import type { InfluencerSettlement, SettlementVersion } from '@/types'
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 const { TextArea } = Input
+const { Panel } = Collapse
 
 export default function Archive() {
   const [searchType, setSearchType] = useState<'order' | 'settlement' | 'version'>('settlement')
@@ -27,6 +29,7 @@ export default function Archive() {
   const [currentItem, setCurrentItem] = useState<any>(null)
   const [versionCompareVisible, setVersionCompareVisible] = useState(false)
   const [compareVersions, setCompareVersions] = useState<string[]>([])
+  const [comparePeriod, setComparePeriod] = useState<string>('')
 
   const { 
     settlements, 
@@ -139,10 +142,15 @@ export default function Archive() {
 
   const handleVersionCompare = () => {
     setCompareVersions([])
+    setComparePeriod('')
     setVersionCompareVisible(true)
   }
 
   const doVersionCompare = () => {
+    if (!comparePeriod) {
+      message.warning('请先选择结算周期')
+      return
+    }
     if (compareVersions.length !== 2) {
       message.warning('请选择两个版本进行对比')
       return
@@ -153,6 +161,10 @@ export default function Archive() {
     const v2 = versions.find(v => v.id === v2Id)
     
     if (!v1 || !v2) return
+    if (v1.period !== v2.period) {
+      message.warning('只能对比同一结算周期的版本')
+      return
+    }
     
     const v1Settlements = settlements.filter(s => v1.settlementIds.includes(s.id))
     const v2Settlements = settlements.filter(s => v2.settlementIds.includes(s.id))
@@ -167,6 +179,20 @@ export default function Archive() {
       const s1 = v1Settlements.find(s => s.influencerName === name)
       const s2 = v2Settlements.find(s => s.influencerName === name)
       
+      const v1OrderNos = new Set(s1?.items.map(i => i.orderNo) || [])
+      const v2OrderNos = new Set(s2?.items.map(i => i.orderNo) || [])
+      const addedOrders = s2?.items.filter(i => !v1OrderNos.has(i.orderNo)) || []
+      const removedOrders = s1?.items.filter(i => !v2OrderNos.has(i.orderNo)) || []
+      const commonOrderNos = [...v1OrderNos].filter(n => v2OrderNos.has(n))
+      const changedOrders: any[] = []
+      commonOrderNos.forEach(no => {
+        const o1 = s1?.items.find(i => i.orderNo === no)
+        const o2 = s2?.items.find(i => i.orderNo === no)
+        if (o1 && o2 && (Math.abs(o1.amount - o2.amount) > 0.01 || Math.abs(o1.commission - o2.commission) > 0.01 || o1.commissionRate !== o2.commissionRate)) {
+          changedOrders.push({ orderNo: no, v1: o1, v2: o2 })
+        }
+      })
+      
       compareData.push({
         name,
         v1Amount: s1?.finalAmount || 0,
@@ -174,7 +200,13 @@ export default function Archive() {
         diff: (s2?.finalAmount || 0) - (s1?.finalAmount || 0),
         v1Orders: s1?.items.length || 0,
         v2Orders: s2?.items.length || 0,
-        ordersDiff: (s2?.items.length || 0) - (s1?.items.length || 0)
+        ordersDiff: (s2?.items.length || 0) - (s1?.items.length || 0),
+        v1Commission: s1?.totalCommission || 0,
+        v2Commission: s2?.totalCommission || 0,
+        commissionDiff: (s2?.totalCommission || 0) - (s1?.totalCommission || 0),
+        addedOrders,
+        removedOrders,
+        changedOrders
       })
     })
     
@@ -588,10 +620,12 @@ export default function Archive() {
                     <List.Item>
                       <Tag color={e.type === 'duplicate_customer' ? 'orange' : 
                                e.type === 'split_payment' ? 'blue' : 
-                               e.type === 'cross_month' ? 'red' : 'purple'}>
+                               e.type === 'cross_month' ? 'red' : 
+                               e.type === 'cooperation_period' ? 'gold' : 'purple'}>
                         {e.type === 'duplicate_customer' ? '重复顾客' :
                          e.type === 'split_payment' ? '拆单付款' :
-                         e.type === 'cross_month' ? '跨月补款' : '无法匹配'}
+                         e.type === 'cross_month' ? '跨月补款' : 
+                         e.type === 'cooperation_period' ? '合作周期异常' : '无法匹配'}
                       </Tag>
                       <span style={{ marginLeft: 8 }}>{e.description}</span>
                       <Tag 
@@ -681,14 +715,24 @@ export default function Archive() {
             <Table
               columns={[
                 { title: '达人姓名', dataIndex: 'name', key: 'name', width: 120 },
-                { title: `V${currentItem.v1.version}金额`, key: 'v1', width: 120,
+                { title: `V${currentItem.v1.version}应付`, key: 'v1', width: 120,
                   render: (_: any, r: any) => `¥${r.v1Amount.toFixed(2)}` },
-                { title: `V${currentItem.v2.version}金额`, key: 'v2', width: 120,
+                { title: `V${currentItem.v2.version}应付`, key: 'v2', width: 120,
                   render: (_: any, r: any) => `¥${r.v2Amount.toFixed(2)}` },
                 { title: '金额差异', key: 'diff', width: 120,
                   render: (_: any, r: any) => (
                     <span className={r.diff >= 0 ? 'text-success' : 'text-danger'}>
                       {r.diff >= 0 ? '+' : ''}¥{r.diff.toFixed(2)}
+                    </span>
+                  )},
+                { title: `V${currentItem.v1.version}提成`, key: 'c1', width: 120,
+                  render: (_: any, r: any) => `¥${r.v1Commission.toFixed(2)}` },
+                { title: `V${currentItem.v2.version}提成`, key: 'c2', width: 120,
+                  render: (_: any, r: any) => `¥${r.v2Commission.toFixed(2)}` },
+                { title: '提成差异', key: 'cdiff', width: 120,
+                  render: (_: any, r: any) => (
+                    <span className={r.commissionDiff >= 0 ? 'text-success' : 'text-danger'}>
+                      {r.commissionDiff >= 0 ? '+' : ''}¥{r.commissionDiff.toFixed(2)}
                     </span>
                   )},
                 { title: `V${currentItem.v1.version}订单`, key: 'o1', width: 100,
@@ -706,6 +750,88 @@ export default function Archive() {
               rowKey="name"
               pagination={false}
               size="small"
+              expandable={{
+                expandedRowRender: (record: any) => (
+                  <div style={{ padding: '8px 16px', background: '#fafafa', borderRadius: 4 }}>
+                    {record.addedOrders.length === 0 && record.removedOrders.length === 0 && record.changedOrders.length === 0 && (
+                      <Text type="secondary">无订单变化</Text>
+                    )}
+                    {record.addedOrders.length > 0 && (
+                      <div style={{ marginBottom: 16 }}>
+                        <Tag color="green" style={{ marginBottom: 8 }}>
+                          新增订单 {record.addedOrders.length} 单
+                        </Tag>
+                        <Table
+                          size="small"
+                          pagination={false}
+                          columns={[
+                            { title: '订单号', dataIndex: 'orderNo', key: 'orderNo' },
+                            { title: '项目名称', dataIndex: 'projectName', key: 'projectName' },
+                            { title: '成交金额', dataIndex: 'amount', key: 'amount',
+                              render: (v: number) => `¥${v.toFixed(2)}` },
+                            { title: '提成比例', dataIndex: 'commissionRate', key: 'commissionRate',
+                              render: (v: number) => `${(v * 100).toFixed(1)}%` },
+                            { title: '提成金额', dataIndex: 'commission', key: 'commission',
+                              render: (v: number) => <span className="text-primary">¥{v.toFixed(2)}</span> },
+                            { title: '消费日期', dataIndex: 'date', key: 'date' }
+                          ]}
+                          dataSource={record.addedOrders}
+                          rowKey="id"
+                        />
+                      </div>
+                    )}
+                    {record.removedOrders.length > 0 && (
+                      <div style={{ marginBottom: 16 }}>
+                        <Tag color="red" style={{ marginBottom: 8 }}>
+                          移除订单 {record.removedOrders.length} 单
+                        </Tag>
+                        <Table
+                          size="small"
+                          pagination={false}
+                          columns={[
+                            { title: '订单号', dataIndex: 'orderNo', key: 'orderNo' },
+                            { title: '项目名称', dataIndex: 'projectName', key: 'projectName' },
+                            { title: '成交金额', dataIndex: 'amount', key: 'amount',
+                              render: (v: number) => `¥${v.toFixed(2)}` },
+                            { title: '提成比例', dataIndex: 'commissionRate', key: 'commissionRate',
+                              render: (v: number) => `${(v * 100).toFixed(1)}%` },
+                            { title: '提成金额', dataIndex: 'commission', key: 'commission',
+                              render: (v: number) => <span className="text-primary">¥{v.toFixed(2)}</span> },
+                            { title: '消费日期', dataIndex: 'date', key: 'date' }
+                          ]}
+                          dataSource={record.removedOrders}
+                          rowKey="id"
+                        />
+                      </div>
+                    )}
+                    {record.changedOrders.length > 0 && (
+                      <div>
+                        <Tag color="orange" style={{ marginBottom: 8 }}>
+                          金额/提成变化 {record.changedOrders.length} 单
+                        </Tag>
+                        <Table
+                          size="small"
+                          pagination={false}
+                          columns={[
+                            { title: '订单号', key: 'orderNo',
+                              render: (_: any, r: any) => r.orderNo },
+                            { title: `V${currentItem.v1.version}金额`, key: 'v1amt',
+                              render: (_: any, r: any) => `¥${r.v1.amount.toFixed(2)}` },
+                            { title: `V${currentItem.v2.version}金额`, key: 'v2amt',
+                              render: (_: any, r: any) => `¥${r.v2.amount.toFixed(2)}` },
+                            { title: `V${currentItem.v1.version}提成`, key: 'v1com',
+                              render: (_: any, r: any) => `${(r.v1.commissionRate * 100).toFixed(1)}% / ¥${r.v1.commission.toFixed(2)}` },
+                            { title: `V${currentItem.v2.version}提成`, key: 'v2com',
+                              render: (_: any, r: any) => `${(r.v2.commissionRate * 100).toFixed(1)}% / ¥${r.v2.commission.toFixed(2)}` }
+                          ]}
+                          dataSource={record.changedOrders}
+                          rowKey="orderNo"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )
+              }}
             />
           </div>
         )}
@@ -725,28 +851,82 @@ export default function Archive() {
               <Descriptions.Item label="包含结算单" span={2}>
                 {currentItem.settlementIds.length} 份
               </Descriptions.Item>
+              <Descriptions.Item label="达人数量">
+                {currentItem.settlements.length} 人
+              </Descriptions.Item>
+              <Descriptions.Item label="合计佣金">
+                <span className="text-primary font-bold">
+                  ¥{currentItem.settlements.reduce((sum: number, s: any) => sum + s.finalAmount, 0).toFixed(2)}
+                </span>
+              </Descriptions.Item>
               {currentItem.note && (
                 <Descriptions.Item label="备注" span={2}>
                   {currentItem.note}
                 </Descriptions.Item>
               )}
             </Descriptions>
-            <div className="mb-16">
-              <Text type="secondary">包含达人：</Text>
-              <div className="mt-8">
-                {currentItem.settlements.map((s: any) => (
-                  <Tag key={s.id} color="blue" style={{ marginBottom: 8 }}>
-                    {s.influencerName} - ¥{s.finalAmount.toFixed(2)}
-                  </Tag>
-                ))}
-              </div>
-            </div>
-            <div>
-              <Text type="secondary">合计佣金：</Text>
-              <span className="text-primary font-bold text-large" style={{ marginLeft: 8 }}>
-                ¥{currentItem.settlements.reduce((sum: number, s: any) => sum + s.finalAmount, 0).toFixed(2)}
-              </span>
-            </div>
+
+            <Title level={5} style={{ marginBottom: 12 }}>达人结算单（点击展开查看订单明细）</Title>
+            <Collapse 
+              defaultActiveKey={[]} 
+              ghost
+              style={{ background: '#fff' }}
+            >
+              {currentItem.settlements.map((s: InfluencerSettlement) => (
+                <Panel 
+                  key={s.id}
+                  header={
+                    <Space>
+                      <span className="font-bold">{s.influencerName}</span>
+                      <Tag color="blue">{s.items.length} 单</Tag>
+                      <Tag color="green">¥{s.totalAmount.toFixed(2)}</Tag>
+                      <Tag color="red">¥{s.finalAmount.toFixed(2)}</Tag>
+                      <Tag color={s.status === 'draft' ? 'default' : s.status === 'confirmed' ? 'processing' : 'success'}>
+                        {s.status === 'draft' ? '草稿' : s.status === 'confirmed' ? '已确认' : '已付款'}
+                      </Tag>
+                    </Space>
+                  }
+                >
+                  <Descriptions bordered column={3} size="small" style={{ marginBottom: 12 }}>
+                    <Descriptions.Item label="顾客数">{s.customerCount} 人</Descriptions.Item>
+                    <Descriptions.Item label="有效顾客">{s.validCustomerCount} 人</Descriptions.Item>
+                    <Descriptions.Item label="订单数">{s.items.length} 单</Descriptions.Item>
+                    <Descriptions.Item label="成交总额">
+                      <span className="amount-positive">¥{s.totalAmount.toFixed(2)}</span>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="提成总额">
+                      <span className="text-primary">¥{s.totalCommission.toFixed(2)}</span>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="应付佣金">
+                      <span className="text-primary font-bold">¥{s.finalAmount.toFixed(2)}</span>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="固定探店费">¥{s.fixedFee.toFixed(2)}</Descriptions.Item>
+                    <Descriptions.Item label="有效客资奖励">¥{s.validCustomerReward.toFixed(2)}</Descriptions.Item>
+                    <Descriptions.Item label="封顶金额">¥{s.maxAmount.toFixed(2)}</Descriptions.Item>
+                  </Descriptions>
+                  <Table
+                    columns={[
+                      { title: '订单号', dataIndex: 'orderNo', key: 'orderNo' },
+                      { title: '顾客姓名', dataIndex: 'customerName', key: 'customerName', render: (v: string) => v || '-' },
+                      { title: '项目名称', dataIndex: 'projectName', key: 'projectName' },
+                      { title: '项目类别', dataIndex: 'categoryName', key: 'categoryName',
+                        render: (v: string) => <Tag color="blue">{v}</Tag> },
+                      { title: '成交金额', dataIndex: 'amount', key: 'amount',
+                        render: (v: number) => `¥${v.toFixed(2)}` },
+                      { title: '提成比例', dataIndex: 'commissionRate', key: 'commissionRate',
+                        render: (v: number) => `${(v * 100).toFixed(1)}%` },
+                      { title: '提成金额', dataIndex: 'commission', key: 'commission',
+                        render: (v: number) => <span className="text-primary">¥{v.toFixed(2)}</span> },
+                      { title: '消费日期', dataIndex: 'date', key: 'date' }
+                    ]}
+                    dataSource={s.items}
+                    rowKey="id"
+                    pagination={{ pageSize: 5, size: 'small' }}
+                    size="small"
+                  />
+                </Panel>
+              ))}
+            </Collapse>
           </div>
         )}
       </Modal>
@@ -760,20 +940,40 @@ export default function Archive() {
         cancelText="取消"
       >
         <div className="mb-16">
-          <Text type="secondary">请选择同一结算周期的两个版本进行对比</Text>
+          <Text type="secondary">请先选择结算周期，再选择该周期内的两个版本进行对比</Text>
         </div>
-        <Select
-          mode="multiple"
-          placeholder="请选择两个版本"
-          value={compareVersions}
-          onChange={setCompareVersions}
-          style={{ width: '100%' }}
-          maxTagCount={2}
-          options={versions.map(v => ({
-            value: v.id,
-            label: `${v.period} - V${v.version} (${new Date(v.createdAt).toLocaleDateString()})`
-          }))}
-        />
+        <Form layout="vertical">
+          <Form.Item label="结算周期" required>
+            <Select
+              placeholder="请选择结算周期"
+              value={comparePeriod || undefined}
+              onChange={(val) => {
+                setComparePeriod(val)
+                setCompareVersions([])
+              }}
+              style={{ width: '100%' }}
+              options={periods.map(p => ({ value: p, label: p }))}
+            />
+          </Form.Item>
+          <Form.Item label="对比版本（选择两个）" required>
+            <Select
+              mode="multiple"
+              disabled={!comparePeriod}
+              placeholder={comparePeriod ? '请选择两个版本' : '请先选择结算周期'}
+              value={compareVersions}
+              onChange={(vals) => setCompareVersions(vals.slice(0, 2))}
+              style={{ width: '100%' }}
+              maxTagCount={2}
+              options={versions
+                .filter(v => v.period === comparePeriod)
+                .sort((a, b) => b.version - a.version)
+                .map(v => ({
+                  value: v.id,
+                  label: `V${v.version} (${new Date(v.createdAt).toLocaleDateString()})`
+                }))}
+            />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   )
